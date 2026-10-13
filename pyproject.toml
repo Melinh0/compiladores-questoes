@@ -1,0 +1,23 @@
+[project]
+name = "pdf-extractor"
+version = "0.1.0"
+description = "Extrai PDFs de uma página HTML e baixa localmente"
+requires-python = ">=3.8"
+dependencies = [
+    "requests>=2.31.0",
+    "beautifulsoup4>=4.12.0",
+    "streamlit>=1.40.1",
+    "python-dotenv>=1.0.1",
+    "pypdf2>=3.0.1",
+    "pymupdf>=1.24.11",
+    "pillow>=10.4.0",
+    "opencv-python-headless>=4.13.0.92",
+    "pytesseract>=0.3.13",
+    "python-pptx>=1.0.2",
+    "python-docx>=1.1.2",
+    "reportlab>=4.4.3",
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
