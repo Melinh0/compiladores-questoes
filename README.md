@@ -16,10 +16,10 @@ compiladores-questoes/
 │       ├── llm.py               # Integração com Ollama LLM
 │       └── file_utils.py        # Utilitários de arquivo
 ├── data/
-│   ├── _fonte_pre_correcao.pdf  # PDF antes da correção (fonte da extração)
 │   ├── source.json              # Documento estruturado (20 seções, 99 questões)
 │   ├── figs/                    # 86 figuras extraídas do PDF
-│   └── Compiladores_Questoes_e_Resolucoes_reorganizado.pdf  # PDF gerado
+│   ├── Compiladores_Questoes_e_Resolucoes_reorganizado.pdf  # PDF gerado
+│   └── Compiladores.zip         # Material bruto original (local, fora do git)
 ├── pyproject.toml               # Dependências do projeto
 └── requirements.txt
 ```
@@ -68,7 +68,8 @@ streamlit run app.py
 
 O PDF `data/Compiladores_Questoes_e_Resolucoes_reorganizado.pdf` (123 páginas) é
 gerado a partir de `data/source.json`. Ele foi corrigido em relação à versão
-anterior (`data/_fonte_pre_correcao.pdf`) para resolver três problemas:
+anterior (a versão do commit inicial, disponível no histórico do git) para
+resolver três problemas:
 
 1. **Provás do meio × provas finais misturadas.** As provas complementares
    (au02, au05, wi08, au09, au11) vinham jogadas todas depois das finais. Agora
@@ -98,18 +99,26 @@ topo de que o conteúdo é de fim de curso.
 
 ## Regenerando o PDF
 
-```bash
-# 1) PDF -> JSON estruturado + figuras
-python3 src/extract_document.py
+O fluxo do dia a dia é só este:
 
-# 2) JSON -> PDF corrigido (itera até a paginação estabilizar)
+```bash
+# 1) editar o conteúdo, se precisar: data/source.json
+#    (ou os mapas SEC_TITLES, DUPES e PARTS no topo de src/build_document.py)
+# 2) regenerar o PDF (itera até a paginação estabilizar, ~5 s)
 python3 src/build_document.py
 ```
 
-As duas etapas são independentes: dá para mexer só no renderizador
-(`src/build_document.py`) e regenerar sem reextrair. Para mudar o conteúdo,
-edite `data/source.json` (ou os mapas `SEC_TITLES`, `DUPES` e `PARTS` no topo de
-`src/build_document.py`) e rode o passo 2.
+Raramente é preciso ir além. A extração (`src/extract_document.py`, PDF →
+JSON + figuras) foi feita uma única vez a partir do PDF anterior à correção,
+que não é mais versionado — ocupa ~10 MB e já vive no histórico do git. Se um
+dia for preciso reextrair do zero:
+
+```bash
+git show da96499:data/Compiladores_Questoes_e_Resolucoes_reorganizado.pdf \
+    > data/_fonte_pre_correcao.pdf
+python3 src/extract_document.py
+python3 src/build_document.py
+```
 
 ## Dependências Principais
 

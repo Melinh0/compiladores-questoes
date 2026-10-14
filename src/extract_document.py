@@ -8,8 +8,15 @@ Gera:
 A fonte estruturada é o arquivo versionável: o PDF final é sempre
 reconstruído a partir dela (ver src/build_document.py).
 
-A fonte é a versão anterior à correção (data/_fonte_pre_correcao.pdf), guardada
-para que a reconstrução seja sempre reproduzível.
+A fonte é a versão anterior à correção, que não é mais versionada (ocupa ~10 MB
+e já vive no histórico do git). Se um dia for preciso reextrair do zero,
+restaure-a antes:
+
+  git show da96499:data/Compiladores_Questoes_e_Resolucoes_reorganizado.pdf \\
+      > data/_fonte_pre_correcao.pdf
+
+Na prática, a extração é um passo único: o que se edita no dia a dia é o
+data/source.json, seguido de src/build_document.py.
 
 Uso:
   python3 src/extract_document.py [--pdf data/_fonte_pre_correcao.pdf] [--out data/source.json]
@@ -485,6 +492,19 @@ def main() -> int:
     ap.add_argument("--out", default="data/source.json")
     ap.add_argument("--figs", default="data/figs")
     args = ap.parse_args()
+
+    if not os.path.exists(args.pdf):
+        print(
+            f"Fonte não encontrada: {args.pdf}\n"
+            "É a versão anterior à correção do PDF; ela ficou só no histórico do git.\n"
+            "Restaure com:\n"
+            "  git show da96499:data/Compiladores_Questoes_e_Resolucoes_reorganizado.pdf \\\n"
+            f"      > {args.pdf}\n"
+            "Na prática a extração é um passo único: edite data/source.json e rode\n"
+            "src/build_document.py para regenerar o PDF.",
+            file=sys.stderr,
+        )
+        return 1
 
     data = extract(args.pdf, args.out, args.figs)
     with open(args.out, "w", encoding="utf-8") as fh:

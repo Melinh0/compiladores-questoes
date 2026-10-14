@@ -29,3 +29,6 @@ uv.lock
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Material bruto (mantido só localmente)
+data/Compiladores.zip
