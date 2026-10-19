@@ -1,26 +1,4 @@
 #!/usr/bin/env python3
-"""Extrai o PDF compilado de questões para uma fonte estruturada.
-
-Gera:
-  data/source.json  - seções, questões, parágrafos, listas, código e figuras
-  data/figs/*.png   - figuras (prints/gabaritos) extraídas do PDF
-
-A fonte estruturada é o arquivo versionável: o PDF final é sempre
-reconstruído a partir dela (ver src/build_document.py).
-
-A fonte é a versão anterior à correção, que não é mais versionada (ocupa ~10 MB
-e já vive no histórico do git). Se um dia for preciso reextrair do zero,
-restaure-a antes:
-
-  git show da96499:data/Compiladores_Questoes_e_Resolucoes_reorganizado.pdf \\
-      > data/_fonte_pre_correcao.pdf
-
-Na prática, a extração é um passo único: o que se edita no dia a dia é o
-data/source.json, seguido de src/build_document.py.
-
-Uso:
-  python3 src/extract_document.py [--pdf data/_fonte_pre_correcao.pdf] [--out data/source.json]
-"""
 from __future__ import annotations
 
 import argparse
@@ -31,17 +9,14 @@ import sys
 
 import pymupdf
 
-# Sentinelas de formatação inline (evitam colidir com *, ` ou & do texto).
-B, BE = "\x01", "\x02"  # negrito
-C, CE = "\x03", "\x04"  # monoespaçado (código)
+B, BE = "\x01", "\x02"
+C, CE = "\x03", "\x04"
 
 FOOTER_MARK = "Compiladores — Questões e Resoluções"
 
-# ---------------------------------------------------------------- utilidades
 
 
 def markup(spans) -> str:
-    """Converte spans de uma linha em texto com sentinelas de estilo."""
     out = []
     for s in spans:
         t = s["text"]
@@ -60,7 +35,6 @@ def markup(spans) -> str:
 
 
 def balance(text: str) -> str:
-    """Garante sentinelas de estilo fechadas dentro do trecho."""
     pairs = ((B, BE), (C, CE))
     for op, cl in pairs:
         if text.count(op) > text.count(cl):
@@ -74,7 +48,6 @@ def plain(text: str) -> str:
     return re.sub(r"[\x01-\x04]", "", text)
 
 
-# ------------------------------------------------------- regras de segmentação
 
 RE_BULLET = re.compile(r"^\s*[•▪◦]\s*")
 RE_DASH = re.compile(r"^\s*[-–—]\s+")
@@ -105,7 +78,6 @@ def is_bullet(line: str) -> bool:
 
 
 def starts_new(prev: str, line: str) -> bool:
-    """Decide se `line` inaugura um novo item dentro de um bloco de texto."""
     p = plain(prev).rstrip()
     s = plain(line).strip()
     if not s:
@@ -119,7 +91,6 @@ def starts_new(prev: str, line: str) -> bool:
     if RE_CODE.search(s):
         return True
     if p.endswith((",", ";")) and (RE_LABEL_LOWER.match(s) or RE_LABEL_CAP.match(s)):
-        # "…; a: …" / "…; equivalente: …" (curto) continua; rótulo novo = quebra
         if RE_LABEL_LOWER.match(s) and len(plain(s).split(":")[0]) > 6:
             return False
     if p.endswith(":"):
@@ -136,7 +107,6 @@ def starts_new(prev: str, line: str) -> bool:
 
 
 def segment(lines: list[dict]) -> list[dict]:
-    """Quebra um bloco de texto em itens (parágrafos/listas/código)."""
     items: list[dict] = []
     cur: dict | None = None
     for ln in lines:
@@ -167,11 +137,6 @@ def kind_of_item(text: str, mono_ratio: float) -> str:
 
 
 def md_bold(text: str) -> str:
-    """Converte negrito literal **texto** (herdado da fonte) em sentinela de negrito.
-
-    Só é aplicado fora de trechos de código e apenas quando há exatamente um par,
-    para não confundir com o operador de potência ** de uma gramática.
-    """
     parts = re.split(r"(\x03[^\x04]*\x04)", text)
     prose = [p for i, p in enumerate(parts) if i % 2 == 0]
     if sum(p.count("**") for p in prose) != 2:
@@ -196,12 +161,6 @@ def md_bold(text: str) -> str:
 
 
 def row_cells(lines: list[dict]) -> list[str] | None:
-    """Uma linha de tabela: todas as 'linhas' do bloco estão na mesma altura.
-
-    O PDF da fonte descreve cada célula como uma linha própria (PyMuPDF as
-    separa por causa do vão horizontal), então células lado a lado compartilham
-    a mesma y. Código e prosa, em contraste, empilham as linhas na vertical.
-    """
     if not (2 <= len(lines) <= 12):
         return None
     ys = [l["y0"] for l in lines]
@@ -223,7 +182,6 @@ def looks_code(text: str) -> bool:
 
 
 def merge_code_paragraphs(blocks: list[dict]) -> None:
-    """Agrupa parágrafos consecutivos que são código em um único bloco pré-formatado."""
     out: list[dict] = []
     i = 0
     while i < len(blocks):
@@ -242,7 +200,6 @@ def merge_code_paragraphs(blocks: list[dict]) -> None:
     blocks[:] = out
 
 
-# --------------------------------------------------------------- extração
 
 
 def extract(pdf_path: str, out_json: str, figs_dir: str) -> dict:
@@ -276,8 +233,6 @@ def extract(pdf_path: str, out_json: str, figs_dir: str) -> dict:
             new_question("", 1)
         return cur_q["blocks"]
 
-    # ---- tabelas: células lado a lado formam uma linha; linhas consecutivas
-    #      formam a tabela.
     table_rows: list[list[str]] = []
     table_page = [0]
     table_y1 = [None]
@@ -303,7 +258,7 @@ def extract(pdf_path: str, out_json: str, figs_dir: str) -> dict:
         if table_rows:
             cols = max(len(r) for r in table_rows)
             if newpage and cells == table_rows[0]:
-                flush_table()  # cabeçalho repetido: começa outra tabela
+                flush_table()
             elif not newpage and not (
                 2 <= (b["bbox"][1] - table_y1[0]) <= 26 and len(cells) <= cols + 1
             ):
@@ -419,12 +374,10 @@ def extract(pdf_path: str, out_json: str, figs_dir: str) -> dict:
                 prev_kind = "intro"
                 continue
 
-            # linha de tabela: reconstrói a grade
             if try_table_row(b, lines, pno):
                 prev_kind = "table"
                 continue
 
-            # bloco de código / tabela: preserva as linhas
             if mono_chars > 0.5 or pipe_frac > 0.5 or size <= 9.2:
                 flush_table()
                 sink().append(
@@ -450,7 +403,6 @@ def extract(pdf_path: str, out_json: str, figs_dir: str) -> dict:
 
     flush_table()
 
-    # identificadores curtos das seções (usados nas referências cruzadas)
     for sec in sections:
         m = re.match(r"^([A-Za-z]\.[\w]+|[MF]\d|O\d|Exercicio\d+)\b", sec["title"])
         sec["id"] = m.group(1) if m else sec["title"].split(" ")[0]

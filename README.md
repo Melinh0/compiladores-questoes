@@ -18,7 +18,8 @@ compiladores-questoes/
 ├── data/
 │   ├── source.json              # Documento estruturado (20 seções, 99 questões)
 │   ├── figs/                    # 86 figuras extraídas do PDF
-│   ├── Compiladores_Questoes_e_Resolucoes_reorganizado.pdf  # PDF gerado
+│   ├── Compiladores_Questoes_e_Resolucoes_reorganizado.pdf  # PDF gerado (claro)
+│   ├── Compiladores_Questoes_e_Resolucoes_reorganizado_dark.pdf  # PDF gerado (escuro, opcional)
 │   └── Compiladores.zip         # Material bruto original (local, fora do git)
 ├── pyproject.toml               # Dependências do projeto
 └── requirements.txt
@@ -106,6 +107,10 @@ O fluxo do dia a dia é só este:
 #    (ou os mapas SEC_TITLES, DUPES e PARTS no topo de src/build_document.py)
 # 2) regenerar o PDF (itera até a paginação estabilizar, ~5 s)
 python3 src/build_document.py
+
+# tema claro (padrão) ou escuro — o escuro grava um arquivo separado
+python3 src/build_document.py --theme light
+python3 src/build_document.py --theme dark
 ```
 
 Raramente é preciso ir além. A extração (`src/extract_document.py`, PDF →

@@ -1,17 +1,4 @@
 #!/usr/bin/env python3
-"""Reconstrói o PDF de questões de Compiladores a partir de data/source.json.
-
-Correções aplicadas nesta edição (ver README):
-  1. Organização em partes claras: PARTE I = provas do meio, PARTE II = provas
-     finais, PARTE III = exercícios (com sumário e páginas-divisórias).
-  2. Questões repetidas substituídas por uma nota curta com referência
-     (regra: fica a primeira ocorrência no documento).
-  3. Texto reflowado: fim de linha no meio da frase é removido, listas/rótulos
-     ganham a quebra de linha que faltava, código e figuras preservados.
-
-Uso:
-  python3 src/build_document.py [--out data/....pdf]
-"""
 from __future__ import annotations
 
 import argparse
@@ -40,11 +27,34 @@ from reportlab.platypus import (
 )
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-FONT_DIR = "/usr/share/fonts/truetype"
-SANS = f"{FONT_DIR}/liberation/LiberationSans-Regular.ttf"
-SANS_B = f"{FONT_DIR}/liberation/LiberationSans-Bold.ttf"
-MONO = f"{FONT_DIR}/liberation/LiberationMono-Regular.ttf"
-SYM = f"{FONT_DIR}/dejavu/DejaVuSans.ttf"
+_WIN_FONTS = os.path.join(os.environ.get("WINDIR", "C:\\Windows"), "Fonts")
+
+
+def _first_font(*candidates: str) -> str:
+    for path in candidates:
+        if os.path.exists(path):
+            return path
+    raise FileNotFoundError(
+        "Nenhuma fonte encontrada. Tentei:\n  " + "\n  ".join(candidates)
+    )
+
+
+SANS = _first_font(
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+    os.path.join(_WIN_FONTS, "arial.ttf"),
+)
+SANS_B = _first_font(
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    os.path.join(_WIN_FONTS, "arialbd.ttf"),
+)
+MONO = _first_font(
+    "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
+    os.path.join(_WIN_FONTS, "cour.ttf"),
+)
+SYM = _first_font(
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    os.path.join(_WIN_FONTS, "seguisym.ttf"),
+)
 
 PAGE_W, PAGE_H = A4
 LM = RM = 57.6
@@ -52,7 +62,6 @@ TM = 60
 BM = 64
 CONTENT_W = PAGE_W - LM - RM
 
-# ------------------------------------------------------------------ fontes
 
 pdfmetrics.registerFont(TTFont("Sans", SANS))
 pdfmetrics.registerFont(TTFont("Sans-Bold", SANS_B))
@@ -80,74 +89,138 @@ def fallback_chars() -> set[str]:
     return _fallback
 
 
-# ----------------------------------------------------------- estilos
 
-INK = colors.HexColor("#12263F")
-BLUE = colors.HexColor("#0B3D6E")
-GREY = colors.HexColor("#555555")
-RULE = colors.HexColor("#C9D4E0")
-NOTE_BG = colors.HexColor("#FFF6DC")
-NOTE_BD = colors.HexColor("#E3C15A")
+THEMES = {
+    "light": {
+        "PAGE_BG": "#FFFFFF",
+        "INK": "#12263F",
+        "BLUE": "#0B3D6E",
+        "GRUPO": "#14507F",
+        "GREEN": "#1F6F45",
+        "GREY": "#555555",
+        "RULE": "#C9D4E0",
+        "ACCENT": "#E3C15A",
+        "NOTE_BG": "#FFF6DC",
+        "NOTE_BD": "#E3C15A",
+        "NOTE_INK": "#5A4400",
+        "PRE_INK": "#101010",
+        "PRE_BG": "#F2F4F6",
+        "BODY_INK": "#000000",
+        "TBL_HEAD_BG": "#E9EFF6",
+        "FOOTER_INK": "#7A8896",
+        "TOC_DOT": "#9AA7B4",
+    },
+    "dark": {
+        "PAGE_BG": "#12161C",
+        "INK": "#E6EDF3",
+        "BLUE": "#7DB4E8",
+        "GRUPO": "#8FC0EC",
+        "GREEN": "#6FCF97",
+        "GREY": "#A8B3BF",
+        "RULE": "#2E3A47",
+        "ACCENT": "#D4B45A",
+        "NOTE_BG": "#2A2617",
+        "NOTE_BD": "#8A7430",
+        "NOTE_INK": "#EAD9A0",
+        "PRE_INK": "#E0E6EC",
+        "PRE_BG": "#1B222B",
+        "BODY_INK": "#DDE4EB",
+        "TBL_HEAD_BG": "#1C2733",
+        "FOOTER_INK": "#7A8896",
+        "TOC_DOT": "#5A6774",
+    },
+}
 
-S = {}
-S["title"] = ParagraphStyle("title", fontName="Sans-Bold", fontSize=27, leading=32,
-                            textColor=BLUE, alignment=TA_LEFT, spaceAfter=10)
-S["subtitle"] = ParagraphStyle("subtitle", fontName="Sans", fontSize=13, leading=18,
-                               textColor=INK, spaceAfter=6)
-S["cover_meta"] = ParagraphStyle("cover_meta", fontName="Sans", fontSize=9.5, leading=14,
-                                 textColor=GREY, spaceAfter=4)
-S["h2big"] = ParagraphStyle("h2big", fontName="Sans-Bold", fontSize=16, leading=20,
-                            textColor=BLUE, spaceBefore=10, spaceAfter=8,
-                            keepWithNext=True)
-S["parte"] = ParagraphStyle("parte", fontName="Sans-Bold", fontSize=24, leading=29,
-                            textColor=BLUE, spaceBefore=70, spaceAfter=12)
-S["parte_desc"] = ParagraphStyle("parte_desc", fontName="Sans", fontSize=11, leading=16,
-                                 textColor=INK, spaceAfter=8)
-S["grupo"] = ParagraphStyle("grupo", fontName="Sans-Bold", fontSize=13, leading=17,
-                            textColor=colors.HexColor("#14507F"), spaceBefore=16,
-                            spaceAfter=5, keepWithNext=True)
-S["grupo_note"] = ParagraphStyle("grupo_note", fontName="Sans", fontSize=9, leading=12.5,
-                                 textColor=GREY, spaceAfter=8, leftIndent=8)
-S["h1"] = ParagraphStyle("h1", fontName="Sans-Bold", fontSize=14.5, leading=18,
-                         textColor=BLUE, spaceBefore=4, spaceAfter=6, keepWithNext=True)
-S["intro"] = ParagraphStyle("intro", fontName="Sans", fontSize=9, leading=12.5,
-                            textColor=GREY, spaceAfter=10, alignment=TA_JUSTIFY)
-S["h2"] = ParagraphStyle("h2", fontName="Sans-Bold", fontSize=12, leading=15,
-                         textColor=INK, spaceBefore=15, spaceAfter=5, keepWithNext=True)
-S["h3"] = ParagraphStyle("h3", fontName="Sans-Bold", fontSize=10.5, leading=13.5,
-                         textColor=colors.HexColor("#1F6F45"), spaceBefore=9,
-                         spaceAfter=3, keepWithNext=True)
-S["body"] = ParagraphStyle("body", fontName="Sans", fontSize=10, leading=13.6,
-                           textColor=colors.black, spaceAfter=6, alignment=TA_JUSTIFY)
-S["item"] = ParagraphStyle("item", parent=S["body"], spaceAfter=4, alignment=TA_LEFT)
-S["li"] = ParagraphStyle("li", parent=S["body"], leftIndent=14, bulletIndent=2,
-                         spaceAfter=3, alignment=TA_LEFT)
-S["pre"] = ParagraphStyle("pre", fontName="Mono", fontSize=8.6, leading=11.4,
-                          textColor=colors.HexColor("#101010"), backColor=colors.HexColor("#F2F4F6"),
-                          borderPadding=(6, 7, 6, 7), spaceBefore=2, spaceAfter=7,
-                          alignment=TA_LEFT, wordWrap="CJK")
-S["note"] = ParagraphStyle("note", fontName="Sans", fontSize=9.4, leading=13,
-                           textColor=colors.HexColor("#5A4400"), backColor=NOTE_BG,
-                           borderColor=NOTE_BD, borderWidth=0.8, borderPadding=(7, 8, 7, 8),
-                           spaceBefore=4, spaceAfter=8, leftIndent=0, rightIndent=0)
-S["td"] = ParagraphStyle("td", fontName="Sans", fontSize=8.5, leading=10.6,
-                         textColor=colors.black)
-S["tdh"] = ParagraphStyle("tdh", fontName="Sans-Bold", fontSize=8.5, leading=10.6,
-                          textColor=INK)
-S["toc0"] = ParagraphStyle("toc0", fontName="Sans-Bold", fontSize=11.5, leading=17,
-                           textColor=BLUE, spaceBefore=8)
-S["toc1"] = ParagraphStyle("toc1", fontName="Sans-Bold", fontSize=10, leading=14.5,
-                           textColor=INK, leftIndent=10)
-S["toc2"] = ParagraphStyle("toc2", fontName="Sans", fontSize=9.6, leading=13.5,
-                           textColor=INK, leftIndent=24)
-S["toc3"] = ParagraphStyle("toc3", fontName="Sans", fontSize=9, leading=12.4,
-                           textColor=GREY, leftIndent=42)
-S["footer"] = ParagraphStyle("footer", fontName="Sans", fontSize=8, leading=10,
-                             textColor=colors.HexColor("#7A8896"))
+S: dict = {}
+THEME = "light"
 
-from reportlab.lib.enums import TA_CENTER  # noqa: E402
 
-# ------------------------------------------------------- organização
+def apply_theme(name: str) -> None:
+    global THEME
+    global PAGE_BG, INK, BLUE, GRUPO, GREEN, GREY, RULE, ACCENT
+    global NOTE_BG, NOTE_BD, NOTE_INK, PRE_INK, PRE_BG, BODY_INK
+    global TBL_HEAD_BG, FOOTER_INK, TOC_DOT
+    pal = THEMES[name]
+    THEME = name
+    PAGE_BG = colors.HexColor(pal["PAGE_BG"])
+    INK = colors.HexColor(pal["INK"])
+    BLUE = colors.HexColor(pal["BLUE"])
+    GRUPO = colors.HexColor(pal["GRUPO"])
+    GREEN = colors.HexColor(pal["GREEN"])
+    GREY = colors.HexColor(pal["GREY"])
+    RULE = colors.HexColor(pal["RULE"])
+    ACCENT = colors.HexColor(pal["ACCENT"])
+    NOTE_BG = colors.HexColor(pal["NOTE_BG"])
+    NOTE_BD = colors.HexColor(pal["NOTE_BD"])
+    NOTE_INK = colors.HexColor(pal["NOTE_INK"])
+    PRE_INK = colors.HexColor(pal["PRE_INK"])
+    PRE_BG = colors.HexColor(pal["PRE_BG"])
+    BODY_INK = colors.HexColor(pal["BODY_INK"])
+    TBL_HEAD_BG = colors.HexColor(pal["TBL_HEAD_BG"])
+    FOOTER_INK = colors.HexColor(pal["FOOTER_INK"])
+    TOC_DOT = pal["TOC_DOT"]
+
+    S.clear()
+    S["title"] = ParagraphStyle("title", fontName="Sans-Bold", fontSize=27, leading=32,
+                                textColor=BLUE, alignment=TA_LEFT, spaceAfter=10)
+    S["subtitle"] = ParagraphStyle("subtitle", fontName="Sans", fontSize=13, leading=18,
+                                   textColor=INK, spaceAfter=6)
+    S["cover_meta"] = ParagraphStyle("cover_meta", fontName="Sans", fontSize=9.5, leading=14,
+                                     textColor=GREY, spaceAfter=4)
+    S["h2big"] = ParagraphStyle("h2big", fontName="Sans-Bold", fontSize=16, leading=20,
+                                textColor=BLUE, spaceBefore=10, spaceAfter=8,
+                                keepWithNext=True)
+    S["parte"] = ParagraphStyle("parte", fontName="Sans-Bold", fontSize=24, leading=29,
+                                textColor=BLUE, spaceBefore=70, spaceAfter=12)
+    S["parte_desc"] = ParagraphStyle("parte_desc", fontName="Sans", fontSize=11, leading=16,
+                                     textColor=INK, spaceAfter=8)
+    S["grupo"] = ParagraphStyle("grupo", fontName="Sans-Bold", fontSize=13, leading=17,
+                                textColor=GRUPO, spaceBefore=16,
+                                spaceAfter=5, keepWithNext=True)
+    S["grupo_note"] = ParagraphStyle("grupo_note", fontName="Sans", fontSize=9, leading=12.5,
+                                     textColor=GREY, spaceAfter=8, leftIndent=8)
+    S["h1"] = ParagraphStyle("h1", fontName="Sans-Bold", fontSize=14.5, leading=18,
+                             textColor=BLUE, spaceBefore=4, spaceAfter=6, keepWithNext=True)
+    S["intro"] = ParagraphStyle("intro", fontName="Sans", fontSize=9, leading=12.5,
+                                textColor=GREY, spaceAfter=10, alignment=TA_JUSTIFY)
+    S["h2"] = ParagraphStyle("h2", fontName="Sans-Bold", fontSize=12, leading=15,
+                             textColor=INK, spaceBefore=15, spaceAfter=5, keepWithNext=True)
+    S["h3"] = ParagraphStyle("h3", fontName="Sans-Bold", fontSize=10.5, leading=13.5,
+                             textColor=GREEN, spaceBefore=9,
+                             spaceAfter=3, keepWithNext=True)
+    S["body"] = ParagraphStyle("body", fontName="Sans", fontSize=10, leading=13.6,
+                               textColor=BODY_INK, spaceAfter=6, alignment=TA_JUSTIFY)
+    S["item"] = ParagraphStyle("item", parent=S["body"], spaceAfter=4, alignment=TA_LEFT)
+    S["li"] = ParagraphStyle("li", parent=S["body"], leftIndent=14, bulletIndent=2,
+                             spaceAfter=3, alignment=TA_LEFT)
+    S["pre"] = ParagraphStyle("pre", fontName="Mono", fontSize=8.6, leading=11.4,
+                              textColor=PRE_INK, backColor=PRE_BG,
+                              borderPadding=(6, 7, 6, 7), spaceBefore=2, spaceAfter=7,
+                              alignment=TA_LEFT, wordWrap="CJK")
+    S["note"] = ParagraphStyle("note", fontName="Sans", fontSize=9.4, leading=13,
+                               textColor=NOTE_INK, backColor=NOTE_BG,
+                               borderColor=NOTE_BD, borderWidth=0.8, borderPadding=(7, 8, 7, 8),
+                               spaceBefore=4, spaceAfter=8, leftIndent=0, rightIndent=0)
+    S["td"] = ParagraphStyle("td", fontName="Sans", fontSize=8.5, leading=10.6,
+                             textColor=BODY_INK)
+    S["tdh"] = ParagraphStyle("tdh", fontName="Sans-Bold", fontSize=8.5, leading=10.6,
+                              textColor=INK)
+    S["toc0"] = ParagraphStyle("toc0", fontName="Sans-Bold", fontSize=11.5, leading=17,
+                               textColor=BLUE, spaceBefore=8)
+    S["toc1"] = ParagraphStyle("toc1", fontName="Sans-Bold", fontSize=10, leading=14.5,
+                               textColor=INK, leftIndent=10)
+    S["toc2"] = ParagraphStyle("toc2", fontName="Sans", fontSize=9.6, leading=13.5,
+                               textColor=INK, leftIndent=24)
+    S["toc3"] = ParagraphStyle("toc3", fontName="Sans", fontSize=9, leading=12.4,
+                               textColor=GREY, leftIndent=42)
+    S["footer"] = ParagraphStyle("footer", fontName="Sans", fontSize=8, leading=10,
+                                 textColor=FOOTER_INK)
+
+
+apply_theme("light")
+
+from reportlab.lib.enums import TA_CENTER
+
 
 PARTS = [
     {
@@ -229,7 +302,6 @@ PARTS = [
     },
 ]
 
-# Títulos reescritos para deixar a classificação explícita.
 SEC_TITLES = {
     "I.1": "I.1 — Primeira Prova do André · prova do meio (gabarito oficial, inglês)",
     "I.2": "I.2 — Segunda Prova do André · prova do meio (gabarito oficial, inglês)",
@@ -253,7 +325,6 @@ SEC_TITLES = {
     "Exercicio5": "Exercício 5 — Grafo de interferência e coloração (slide N-backend)",
 }
 
-# (seção repetida, título da questão repetida) -> (seção de origem, título original)
 DUPES = [
     ("I.3", "Questão 3", "I.1", "Questão 2"),
     ("M2", "Pergunta 1", "I.1", "Questão 1"),
@@ -283,7 +354,6 @@ NOTE_FINAL = (
 )
 
 
-# ------------------------------------------------------------- utilidades
 
 def plain(text: str) -> str:
     return re.sub(r"[\x01-\x04]", "", text)
@@ -319,7 +389,6 @@ def to_xml(text: str) -> str:
 
 
 def toc_line(level: int, text: str, page) -> Paragraph:
-    """Linha do sumário com pontilhado até o número da página."""
     style = S[f"toc{min(level, 3)}"]
     page_str = str(page)
     dot = "."
@@ -328,7 +397,7 @@ def toc_line(level: int, text: str, page) -> Paragraph:
     dot_w = pdfmetrics.stringWidth(dot, style.fontName, style.fontSize)
     avail = CONTENT_W - style.leftIndent - page_w - 10
     ndots = int(max(0.0, avail - text_w) / dot_w)
-    dots = f'<font color="#9AA7B4">{dot * ndots}</font> ' if ndots else " "
+    dots = f'<font color="{TOC_DOT}">{dot * ndots}</font> ' if ndots else " "
     return Paragraph(f"{to_xml(text)}{dots}{esc(page_str)}", style)
 
 
@@ -344,7 +413,6 @@ def same_title(title: str, prefix: str) -> bool:
 
 
 class Mark(Flowable):
-    """Marca a página em que um elemento foi desenhado."""
 
     def __init__(self, key: str, pages: dict):
         super().__init__()
@@ -357,7 +425,6 @@ class Mark(Flowable):
         self.pages[self.key] = self.canv.getPageNumber()
 
 
-# ------------------------------------------------------------- construção
 
 class Doc(BaseDocTemplate):
     def __init__(self, filename, **kw):
@@ -371,18 +438,19 @@ class Doc(BaseDocTemplate):
     @staticmethod
     def _footer(canvas, doc):
         canvas.saveState()
+        canvas.setFillColor(PAGE_BG)
+        canvas.rect(0, 0, PAGE_W, PAGE_H, stroke=0, fill=1)
         canvas.setStrokeColor(RULE)
         canvas.setLineWidth(0.5)
         canvas.line(LM, BM - 16, PAGE_W - RM, BM - 16)
         canvas.setFont("Sans", 8)
-        canvas.setFillColor(colors.HexColor("#7A8896"))
+        canvas.setFillColor(FOOTER_INK)
         canvas.drawCentredString(PAGE_W / 2.0, BM - 30,
                                  f"Compiladores — Questões e Resoluções  |  página {canvas.getPageNumber()}")
         canvas.restoreState()
 
 
 def make_table(rows: list[list[str]]):
-    """Grade de tabela reconstruída a partir das células da fonte."""
     from reportlab.platypus import Table, TableStyle
 
     head = [Paragraph(to_xml(c) if c.strip() else " ", S["tdh"]) for c in rows[0]]
@@ -404,7 +472,7 @@ def make_table(rows: list[list[str]]):
         TableStyle(
             [
                 ("GRID", (0, 0), (-1, -1), 0.5, RULE),
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#E9EFF6")),
+                ("BACKGROUND", (0, 0), (-1, 0), TBL_HEAD_BG),
                 ("VALIGN", (0, 0), (-1, -1), "TOP"),
                 ("LEFTPADDING", (0, 0), (-1, -1), 4),
                 ("RIGHTPADDING", (0, 0), (-1, -1), 4),
@@ -448,11 +516,10 @@ def build_story(data, known, pages, toc):
 
     story = []
 
-    # ---------------- capa
     story += [
         Spacer(1, 46),
         Paragraph("Compiladores — Questões e Resoluções", S["title"]),
-        HRFlowable(width="100%", thickness=2, color=colors.HexColor("#E3C15A"),
+        HRFlowable(width="100%", thickness=2, color=ACCENT,
                    spaceBefore=4, spaceAfter=16),
         Paragraph("Provas do meio de período, provas finais e exercícios — "
                   "enunciados com resolução", S["subtitle"]),
@@ -495,7 +562,6 @@ def build_story(data, known, pages, toc):
         PageBreak(),
     ]
 
-    # ---------------- sumário
     story += [Paragraph("Sumário", S["h2big"]),
               HRFlowable(width="100%", thickness=1, color=RULE, spaceAfter=8)]
     if not toc:
@@ -505,13 +571,12 @@ def build_story(data, known, pages, toc):
         story.append(toc_line(level, text, page))
     story.append(PageBreak())
 
-    # ---------------- partes
     for pi, part in enumerate(PARTS):
         if pi:
             story.append(PageBreak())
         story.append(Mark(f"part:{part['title']}", pages))
         story.append(Paragraph(part["title"], S["parte"]))
-        story.append(HRFlowable(width="100%", thickness=2, color=colors.HexColor("#E3C15A"),
+        story.append(HRFlowable(width="100%", thickness=2, color=ACCENT,
                                 spaceAfter=12))
         for d in part["desc"]:
             story.append(Paragraph(d, S["parte_desc"]))
@@ -586,7 +651,6 @@ def build_story(data, known, pages, toc):
                         else:
                             story.append(Paragraph(to_xml(b["t"]), S["body"]))
 
-    # ---------------- nota final
     story += [PageBreak(), Paragraph("Nota — fontes e critério de compilação", S["h2big"]),
               HRFlowable(width="100%", thickness=1, color=RULE, spaceAfter=10),
               Paragraph(NOTE_FINAL, S["body"])]
@@ -597,16 +661,19 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--src", default=os.path.join(ROOT, "data", "source.json"))
     ap.add_argument("--out", default=None)
+    ap.add_argument("--theme", choices=["light", "dark"], default="light",
+                    help="tema do PDF: claro (padrão) ou escuro")
     args = ap.parse_args()
+    apply_theme(args.theme)
     out = args.out or os.path.join(
-        ROOT, "data", "Compiladores_Questoes_e_Resolucoes_reorganizado.pdf"
+        ROOT, "data",
+        "Compiladores_Questoes_e_Resolucoes_reorganizado"
+        + ("_dark" if args.theme == "dark" else "") + ".pdf"
     )
 
     with open(args.src, encoding="utf-8") as fh:
         data = json.load(fh)
 
-    # Duas passadas até a paginação estabilizar: `pages` recebe as páginas
-    # descobertas nesta passada, `known` alimenta sumário e notas de repetição.
     known: dict = {}
     pages: dict = {}
     for _ in range(6):
@@ -619,12 +686,11 @@ def main() -> int:
             break
         known = dict(pages)
 
-    print(f"{out}: {doc.page} páginas, {len(pages)} âncoras de página")
+    print(f"{out}: {doc.page} páginas, {len(pages)} âncoras de página (tema {THEME})")
     return 0
 
 
 def build_toc(data) -> list:
-    """Lista (nivel, texto, chave) para o sumário; as páginas vêm de `pages`."""
     toc = []
     for part in PARTS:
         toc.append((0, part["title"], f"part:{part['title']}"))
